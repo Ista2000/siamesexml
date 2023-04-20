@@ -16,4 +16,4 @@ seed=$5
 work_dir=$(cd ../../../../ && pwd)
 
 current_working_dir=$(pwd)
-python3 ../runner.py "${model_type}" "${work_dir}" ${version} "$(dirname "$current_working_dir")/configs/${model_type}/${dataset}.json" "${seed}"
+python3 ../runner.py "${model_type}" "${work_dir}" "${version}" "$(dirname "$current_working_dir")/configs/${model_type}/${dataset}.json" "${seed}"

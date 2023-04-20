@@ -1,14 +1,14 @@
 {
     "global": {
-        "dataset": "LF-AmazonTitles-1.3M",
+        "dataset": "LF-WikiSeeAlsoTitles-320K",
         "feature_type": "sparse",
-        "num_labels": 1305265,
+        "num_labels": 312330,
         "arch": "Astec",
         "A": 0.6,
         "B": 2.6,
         "share_weights": true,
         "surrogate_method": 1,
-        "embedding_dims": 512,
+        "embedding_dims": 300,
         "top_k": 200,
 	    "beta": 0.10,
         "save_predictions": true, 
@@ -29,23 +29,24 @@
         "network_type": "siamese",
         "metric": "cosine",
         "validate_after": 8,
-        "learning_rate": 0.01,
-        "batch_size": 4095,
+        "learning_rate": 0.001,
+        "batch_size": 511,
         "dlr_step": 30,
         "normalize": true,
         "optim": "Adam",
         "init": "token_embeddings",
-        "embeddings": "fasttextB_embeddings_512d.npy",
+        "embeddings": "fasttextB_embeddings_300d.npy",
         "validate": true,
-        "save_intermediate": true
+        "save_intermediate": true,
+        "sync_step": 5
     },
     "extreme": {
         "num_epochs": 21,
         "dlr_factor": 0.5,
-        "learning_rate": 0.0005,
+        "learning_rate": 0.0002,
         "batch_size": 255,
         "loss": "prob_contrastive",
-        "dlr_step": 14,
+        "dlr_step": 10,
         "ns_method": "ensemble",
         "num_centroids": 1,
         "efC": 300,
@@ -66,7 +67,7 @@
         "shortlist_method": "static",
         "init": "intermediate",
         "use_shortlist": true,
-        "use_intermediate_for_shorty": true,
-        "save_intermediate": false
+        "save_intermediate": false,
+        "use_intermediate_for_shorty": true
     }
 }

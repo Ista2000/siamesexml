@@ -18,12 +18,12 @@ class Linear(nn.Module):
         output size of transformation
     bias: boolean, default=True
         whether to use bias or not
-    device: str, default="cuda:0"
+    device: str, default="cpu"
         keep on this device
     """
 
     def __init__(self, input_size, output_size,
-                 bias=True, device="cuda:0"):
+                 bias=True, device="cpu"):
         super(Linear, self).__init__()
         self.device = device  # Useful in case of multiple GPUs
         self.input_size = input_size
@@ -89,12 +89,12 @@ class SparseLinear(Linear):
         index for dummy label; embedding is not updated
     bias: boolean, default=True
         whether to use bias or not
-    device: str, default="cuda:0"
+    device: str, default="cpu"
         keep on this device
     """
 
     def __init__(self, input_size, output_size, padding_idx=None,
-                 bias=True, device="cuda:0"):
+                 bias=True, device="cpu"):
         self.padding_idx = padding_idx
         super(SparseLinear, self).__init__(
             input_size=input_size,
@@ -179,12 +179,12 @@ class UNSparseLinear(SparseLinear):
         index for dummy label; embedding is not updated
     bias: boolean, default=True
         whether to use bias or not
-    device: str, default="cuda:0"
+    device: str, default="cpu"
         keep on this device
     """
 
     def __init__(self, input_size, output_size,
-                 padding_idx=None, device="cuda:0"):
+                 padding_idx=None, device="cpu"):
         super(UNSparseLinear, self).__init__(
             input_size=input_size,
             output_size=output_size,

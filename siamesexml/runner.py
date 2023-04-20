@@ -1,3 +1,7 @@
+import glob
+
+import wandb
+
 import libs.parameters as parameters
 import json
 import sys
@@ -88,7 +92,6 @@ def print_run_stats(train_time, model_size, avg_prediction_time, fname=None):
 
 
 def run_siamesexml(work_dir, pipeline, version, seed, config):
-
     # fetch arguments/parameters like dataset name, A, B etc.
     g_config = config['global']
     dataset = g_config['dataset']
@@ -105,7 +108,7 @@ def run_siamesexml(work_dir, pipeline, version, seed, config):
     filter_fname = os.path.join(data_dir, dataset, 'filter_labels_test.txt')
     if not os.path.isfile(filter_fname):
         filter_fname = None
-    
+
     result_dir = os.path.join(
         work_dir, 'results', pipeline, arch, dataset, f'v_{version}')
     model_dir = os.path.join(
@@ -129,7 +132,7 @@ def run_siamesexml(work_dir, pipeline, version, seed, config):
 
     # train intermediate representation
     args.mode = 'train'
-    args.arch = os.path.join(os.getcwd(), f'{arch}.json')
+    args.arch = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'run_scripts', f'{arch}.json')
     temp = data_stats['surrogate'].split(",")
     args.num_labels = int(temp[2])
 
@@ -137,7 +140,21 @@ def run_siamesexml(work_dir, pipeline, version, seed, config):
 
     args.vocabulary_dims_document = int(temp[0])
     args.vocabulary_dims_label = int(temp[0])
+    wandb.init(
+        project='bcfl',
+        entity='bcfl',
+        group='experiment-siamesexml',
+        job_type='surrogate',
+        config={
+            'model': 'SiameseXML',
+            'dataset': args.dataset,
+            'top_k': args.top_k,
+            'learning_rate': args.learning_rate,
+            'batch_size': args.batch_size
+        }
+    )
     _train_time, _ = main(args)
+    wandb.finish()
     train_time += _train_time
 
     # train final representation and extreme classifiers
@@ -150,42 +167,201 @@ def run_siamesexml(work_dir, pipeline, version, seed, config):
     os.makedirs(args.model_dir, exist_ok=True)
 
     args.mode = 'train'
-    args.arch = os.path.join(os.getcwd(), f'{arch}.json')
+    args.arch = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'run_scripts', f'{arch}.json')
     temp = data_stats['extreme'].split(",")
     args.num_labels = int(temp[2])
     args.vocabulary_dims = int(temp[0])
+    wandb.init(
+        project='bcfl',
+        entity='bcfl',
+        group='experiment-siamesexml',
+        job_type='extreme',
+        config={
+            'model': 'SiameseXML',
+            'dataset': args.dataset,
+            'top_k': args.top_k,
+            'learning_rate': args.learning_rate,
+            'batch_size': args.batch_size
+        }
+    )
     _train_time, _model_size = main(args)
+    wandb.finish()
     train_time += _train_time
     model_size += _model_size
 
-    # predict using extreme classifiers
-    args.pred_fname = 'tst_predictions'
-    args.mode = 'predict'
-    _, _, _pred_time = main(args)
-    avg_prediction_time += _pred_time
+    # # predict using extreme classifiers
+    # args.pred_fname = 'tst_predictions'
+    # args.mode = 'predict'
+    # _, _, _pred_time = main(args)
+    # avg_prediction_time += _pred_time
+    #
+    # # copy the prediction files to level-1
+    # shutil.copy(
+    #     os.path.join(result_dir, 'extreme', 'tst_predictions_clf.npz'),
+    #     os.path.join(result_dir, 'tst_predictions_clf.npz'))
+    # shutil.copy(
+    #     os.path.join(result_dir, 'extreme', 'tst_predictions_knn.npz'),
+    #     os.path.join(result_dir, 'tst_predictions_knn.npz'))
+    #
+    # # evaluate
+    # pred_fname = os.path.join(result_dir, 'tst_predictions')
+    # ans = evaluate(
+    #     g_config=g_config,
+    #     data_dir=data_dir,
+    #     pred_fname=pred_fname,
+    #     filter_fname=filter_fname,
+    #     betas=[0.10, 0.25, 0.50, 0.75, 0.90, 1.0])
+    # print(ans)
+    # f_rstats = os.path.join(result_dir, 'log_eval.txt')
+    # with open(f_rstats, "w") as fp:
+    #     fp.write(ans)
+    #
+    # print_run_stats(train_time, model_size, avg_prediction_time, f_rstats)
+    return os.path.join(result_dir, f"score_{g_config['beta']:.2f}.npz"), \
+           train_time, model_size, avg_prediction_time
 
-    # copy the prediction files to level-1
-    shutil.copy(
-        os.path.join(result_dir, 'extreme', 'tst_predictions_clf.npz'),
-        os.path.join(result_dir, 'tst_predictions_clf.npz'))
-    shutil.copy(
-        os.path.join(result_dir, 'extreme', 'tst_predictions_knn.npz'),
-        os.path.join(result_dir, 'tst_predictions_knn.npz'))
+def run_siamesebcfxml(work_dir, pipeline, version, seed, config, client_id, blackboard, experiment_id, wandb_sweep_config=None):
+    # fetch arguments/parameters like dataset name, A, B etc.
+    print("Running siamesebcfxml")
+    g_config = config['global']
+    dataset = g_config['dataset']
+    arch = g_config['arch']
 
-    # evaluate
-    pred_fname = os.path.join(result_dir, 'tst_predictions')
-    ans = evaluate(
-        g_config=g_config,
-        data_dir=data_dir,
-        pred_fname=pred_fname,
-        filter_fname=filter_fname,
-        betas=[0.10, 0.25, 0.50, 0.75, 0.90, 1.0])
-    print(ans)
-    f_rstats = os.path.join(result_dir, 'log_eval.txt')
-    with open(f_rstats, "w") as fp:
-        fp.write(ans)
+    # run stats
+    train_time = 0
+    model_size = 0
+    avg_prediction_time = 0
 
-    print_run_stats(train_time, model_size, avg_prediction_time, f_rstats)
+    # Directory and filenames
+    data_dir = os.path.join(work_dir, 'data', dataset, 'blockchain_federated_learning', 'node_{}'.format(client_id))
+
+    filter_fname = os.path.join(data_dir, dataset, 'filter_labels_test.txt')
+    if not os.path.isfile(filter_fname):
+        filter_fname = None
+
+    result_dir = os.path.join(
+        work_dir, 'results', 'node_{}'.format(client_id), pipeline, arch, dataset, f'v_{version}')
+    model_dir = os.path.join(
+        work_dir, 'models', 'node_{}'.format(client_id), pipeline, arch, dataset, f'v_{version}')
+
+    _args = parameters.Parameters("Parameters")
+    _args.parse_args()
+    _args.update(config['global'])
+    _args.update(config['siamese'])
+    _args.params.seed = seed
+
+    args = _args.params
+    args.data_dir = data_dir
+    args.model_dir = os.path.join(model_dir, 'siamese')
+    args.result_dir = os.path.join(result_dir, 'siamese')
+
+    # Create the label mapping for classification surrogate task
+    data_stats, args.surrogate_mapping = create_surrogate_mapping(
+        data_dir, g_config, seed)
+    os.makedirs(args.result_dir, exist_ok=True)
+    os.makedirs(args.model_dir, exist_ok=True)
+
+    # train intermediate representation
+    args.mode = 'train'
+    args.arch = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'run_scripts', f'{arch}.json')
+    temp = data_stats['surrogate'].split(",")
+    args.num_labels = int(temp[2])
+    args.blackboard = blackboard
+    # with open(list(glob.glob(os.path.abspath(
+    #         os.path.join(os.path.dirname(os.path.realpath(__file__)), '..', '..', 'node_{}'.format(client_id), 'keystore', '*'))))[0],
+    #           'r') as key_file, \
+    #         open(os.path.abspath(os.path.join(os.path.dirname(os.path.realpath(__file__)), '..', '..', 'password.txt')),
+    #              'r') as password_file:
+    #     args.keyfile = json.load(key_file)
+    #     args.password = password_file.read().strip()
+
+    ##FIXME: For non-shared vocabulary
+
+    args.vocabulary_dims_document = int(temp[0])
+    args.vocabulary_dims_label = int(temp[0])
+    args.client_id = client_id
+    if wandb_sweep_config is not None:
+        for key, value in wandb_sweep_config.items():
+            setattr(args, key, value)
+    # wandb.init(
+    #     project='bcfl',
+    #     entity='bcfl',
+    #     group='experiment-siamesebcfxml-{}'.format(experiment_id),
+    #     job_type='node-surrogate-{}'.format(client_id),
+    #     config={
+    #         'model': 'SiameseBCFXML',
+    #         'dataset': args.dataset,
+    #         'top_k': args.top_k,
+    #         'learning_rate': args.learning_rate,
+    #         'batch_size': args.batch_size,
+    #         'sync_step': args.sync_step
+    #     }
+    # )
+    _train_time, _ = main(args)
+    # wandb.finish()
+    train_time += _train_time
+
+    # train final representation and extreme classifiers
+    _args.update(config['extreme'])
+    args = _args.params
+    args.surrogate_mapping = None
+    args.model_dir = os.path.join(model_dir, 'extreme')
+    args.result_dir = os.path.join(result_dir, 'extreme')
+    os.makedirs(args.result_dir, exist_ok=True)
+    os.makedirs(args.model_dir, exist_ok=True)
+
+    args.mode = 'train'
+    # args.arch = os.path.join(os.getcwd(), f'{arch}.json')
+    temp = data_stats['extreme'].split(",")
+    args.num_labels = int(temp[2])
+    args.vocabulary_dims = int(temp[0])
+    # wandb.init(
+    #     project='bcfl',
+    #     entity='bcfl',
+    #     group='experiment-siamesebcfxml-{}'.format(experiment_id),
+    #     job_type='node-extreme-{}'.format(client_id),
+    #     config={
+    #         'model': 'SiameseBCFXML',
+    #         'dataset': args.dataset,
+    #         'top_k': args.top_k,
+    #         'learning_rate': args.learning_rate,
+    #         'batch_size': args.batch_size,
+    #         'sync_step': args.sync_step
+    #     }
+    # )
+    _train_time, _model_size = main(args)
+    # wandb.finish()
+    train_time += _train_time
+    model_size += _model_size
+
+    # # predict using extreme classifiers
+    # args.pred_fname = 'tst_predictions'
+    # args.mode = 'predict'
+    # _, _, _pred_time = main(args)
+    # avg_prediction_time += _pred_time
+    #
+    # # copy the prediction files to level-1
+    # shutil.copy(
+    #     os.path.join(result_dir, 'extreme', 'tst_predictions_clf.npz'),
+    #     os.path.join(result_dir, 'tst_predictions_clf.npz'))
+    # shutil.copy(
+    #     os.path.join(result_dir, 'extreme', 'tst_predictions_knn.npz'),
+    #     os.path.join(result_dir, 'tst_predictions_knn.npz'))
+    #
+    # # evaluate
+    # pred_fname = os.path.join(result_dir, 'tst_predictions')
+    # ans = evaluate(
+    #     g_config=g_config,
+    #     data_dir=data_dir,
+    #     pred_fname=pred_fname,
+    #     filter_fname=filter_fname,
+    #     betas=[0.10, 0.25, 0.50, 0.75, 0.90, 1.0])
+    # print(ans)
+    # f_rstats = os.path.join(result_dir, 'log_eval.txt')
+    # with open(f_rstats, "w") as fp:
+    #     fp.write(ans)
+    #
+    # print_run_stats(train_time, model_size, avg_prediction_time, f_rstats)
     return os.path.join(result_dir, f"score_{g_config['beta']:.2f}.npz"), \
         train_time, model_size, avg_prediction_time
 
@@ -194,7 +370,7 @@ if __name__ == "__main__":
     pipeline = sys.argv[1]
     work_dir = sys.argv[2]
     version = sys.argv[3]
-    config = sys.argv[4]
+    config = json.load(open(sys.argv[4]))
     seed = int(sys.argv[5])
     if pipeline == "SiameseXML" or pipeline == "SiameseXML++":
         run_siamesexml(
@@ -202,6 +378,6 @@ if __name__ == "__main__":
             work_dir=work_dir,
             version=f"{version}_{seed}",
             seed=seed,
-            config=json.load(open(config)))
+            config=config)
     else:
         raise NotImplementedError("")

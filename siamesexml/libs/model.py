@@ -1,6 +1,15 @@
+import base64
+import copy
+import gzip
+import io
+import json
 import logging
 import os
+import sys
 import time
+
+import ray
+import wandb
 from scipy.sparse import issparse
 from xclib.utils.matrix import SMatrix
 from xclib.utils.sparse import sigmoid
@@ -66,14 +75,16 @@ class ModelShortlist(ModelBase):
         self.label_indices = params.label_indices
         self.retrain_hnsw_after = params.retrain_hnsw_after
         self.update_shortlist = params.update_shortlist
+        if params.client_id is not None:
+            self.client_id = params.client_id
 
     def _compute_loss_one(self, _pred, _true, _mask):
         """
         Compute loss for one classifier
         """
-        _true = _true.to(_pred.get_device())
+        _true = _true.to(_pred.device)
         if _mask is not None:
-            _mask = _mask.to(_true.get_device())
+            _mask = _mask.to(_true.device)
         return self.criterion(_pred, _true, _mask).to(self.devices[-1])
 
     def _compute_loss(self, out_ans, batch_data):
@@ -300,6 +311,40 @@ class ModelShortlist(ModelBase):
             self.tracking.train_time = self.tracking.train_time + \
                 batch_train_end_time - batch_train_start_time
 
+            # if wandb.run is not None:
+            if epoch % validate_after != 0:
+                wandb.log({
+                    'client': self.client_id,
+                    'epoch': epoch,
+                    'train_loss_extreme': tr_avg_loss,
+                    'train_time_extreme': batch_train_end_time - batch_train_start_time,
+                    'train_loss_surrogate': wandb.run.summary['train_loss_surrogate'],
+                    'train_time_surrogate': wandb.run.summary['train_time_surrogate'],
+                    'p@1_sur': wandb.run.summary['p@1_sur'],
+                    "p@3_sur": wandb.run.summary['p@3_sur'],
+                    "p@5_sur": wandb.run.summary['p@5_sur'],
+                    "ndcg@1_sur": wandb.run.summary['ndcg@1_sur'],
+                    "ndcg@3_sur": wandb.run.summary['ndcg@3_sur'],
+                    "ndcg@5_sur": wandb.run.summary['ndcg@5_sur'],
+                    "p@1_ens": wandb.run.summary['p@1_ens'],
+                    "p@3_ens": wandb.run.summary['p@3_ens'],
+                    "p@5_ens": wandb.run.summary['p@5_ens'],
+                    "ndcg@1_ens": wandb.run.summary['ndcg@1_ens'],
+                    "ndcg@3_ens": wandb.run.summary['ndcg@3_ens'],
+                    "ndcg@5_ens": wandb.run.summary['ndcg@5_ens'],
+                    "p@1_clf": wandb.run.summary['p@1_clf'],
+                    "p@3_clf": wandb.run.summary['p@3_clf'],
+                    "p@5_clf": wandb.run.summary['p@5_clf'],
+                    "ndcg@1_clf": wandb.run.summary['ndcg@1_clf'],
+                    "ndcg@3_clf": wandb.run.summary['ndcg@3_clf'],
+                    "ndcg@5_clf": wandb.run.summary['ndcg@5_clf'],
+                    "p@1_knn": wandb.run.summary['p@1_knn'],
+                    "p@3_knn": wandb.run.summary['p@3_knn'],
+                    "p@5_knn": wandb.run.summary['p@5_knn'],
+                    "ndcg@1_knn": wandb.run.summary['ndcg@1_knn'],
+                    "ndcg@3_knn": wandb.run.summary['ndcg@3_knn'],
+                    "ndcg@5_knn": wandb.run.summary['ndcg@5_knn'],
+                })
             self.logger.info(
                 "Epoch: {:d}, loss: {:.6f}, time: {:.2f} sec".format(
                     epoch, tr_avg_loss,
@@ -315,6 +360,40 @@ class ModelShortlist(ModelBase):
                 self.tracking.validation_time = self.tracking.validation_time \
                     + val_end_t - val_start_t
                 self.tracking.mean_val_loss.append(val_avg_loss)
+
+                # if wandb.run is not None:
+                wandb.log({
+                    "client": self.client_id,
+                    "epoch": epoch,
+                    "train_loss_extreme": tr_avg_loss,
+                    "train_time_extreme": batch_train_end_time - batch_train_start_time,
+                    'train_loss_surrogate': wandb.run.summary['train_loss_surrogate'],
+                    'train_time_surrogate': wandb.run.summary['train_time_surrogate'],
+                    'p@1_sur': wandb.run.summary['p@1_sur'],
+                    "p@3_sur": wandb.run.summary['p@3_sur'],
+                    "p@5_sur": wandb.run.summary['p@5_sur'],
+                    "ndcg@1_sur": wandb.run.summary['ndcg@1_sur'],
+                    "ndcg@3_sur": wandb.run.summary['ndcg@3_sur'],
+                    "ndcg@5_sur": wandb.run.summary['ndcg@5_sur'],
+                    "p@1_ens": _acc['ens'][0][0],
+                    "p@3_ens": _acc['ens'][0][2],
+                    "p@5_ens": _acc['ens'][0][4],
+                    "ndcg@1_ens": _acc['ens'][1][0],
+                    "ndcg@3_ens": _acc['ens'][1][2],
+                    "ndcg@5_ens": _acc['ens'][1][4],
+                    "p@1_clf": _acc['clf'][0][0],
+                    "p@3_clf": _acc['clf'][0][2],
+                    "p@5_clf": _acc['clf'][0][4],
+                    "ndcg@1_clf": _acc['clf'][1][0],
+                    "ndcg@3_clf": _acc['clf'][1][2],
+                    "ndcg@5_clf": _acc['clf'][1][4],
+                    "p@1_knn": _acc['knn'][0][0],
+                    "p@3_knn": _acc['knn'][0][2],
+                    "p@5_knn": _acc['knn'][0][4],
+                    "ndcg@1_knn": _acc['knn'][1][0],
+                    "ndcg@3_knn": _acc['knn'][1][2],
+                    "ndcg@5_knn": _acc['knn'][1][4]
+                })
                 self.tracking.val_precision.append(_acc['ens'][0])
                 self.tracking.val_ndcg.append(_acc['ens'][1])
                 self.logger.info("Model saved after epoch: {}".format(epoch))
@@ -822,6 +901,15 @@ class ModelSiamese(ModelBase):
     def __init__(self, params, net, criterion, optimizer, shorty=None):
         super().__init__(params, net, criterion, optimizer)
         self.shorty = shorty
+        # self.contract = params.contract
+        # self.w3 = params.w3
+        # self.sync_step = params.sync_step
+        # self.w3.eth.account.enable_unaudited_hdwallet_features()
+        # self.private_key = self.w3.eth.account.decrypt(params.keyfile, params.password)
+        if hasattr(params, 'blackboard'):
+            self.blackboard = params.blackboard
+            self.sync_step = params.sync_step
+            self.client_id = params.client_id
 
     def _create_dataset(self, data_dir, fname_features, fname_labels=None,
                         fname_label_features=None, data=None, mode='predict',
@@ -859,9 +947,9 @@ class ModelSiamese(ModelBase):
 
     def _compute_loss_one(self, _pred, _true, _mask):
         # Compute loss for one classifier
-        _true = _true.to(_pred.get_device())
+        _true = _true.to(_pred.device)
         if _mask is not None:
-            _mask = _mask.to(_true.get_device())
+            _mask = _mask.to(_true.device)
         return self.criterion(_pred, _true, _mask).to(self.devices[-1])
 
     def _compute_loss(self, out_ans, batch_data, zeta=0.7):
@@ -874,6 +962,44 @@ class ModelSiamese(ModelBase):
         loss_1 = self._compute_loss_one(
             out_ans[1], batch_data['Y'], batch_data['Y_mask'])
         return zeta*loss_0 + (1-zeta)*loss_1
+
+    def _sync_model_with_chain(self, train_loader, validation_loader, beta):
+        """
+        Sync model parameters with the chain
+        """
+        local_state_dict = copy.deepcopy(self.net.state_dict())
+        new_state_dict = copy.deepcopy(self.net.state_dict())
+        global_state_dict = ray.get(self.blackboard.get_global_state_dict.remote())
+        if global_state_dict is not None:
+            gamma = 0.5
+            for key, val in tqdm(local_state_dict.items(), desc='Syncing model with chain'):
+                new_state_dict[key] = gamma*val + (1-gamma)*global_state_dict[key]
+            self.net.load_state_dict(new_state_dict)
+        # buffer = io.BytesIO()
+        # torch.save(self.net.state_dict(), buffer)
+        # print("val_avg_loss: {}".format(val_avg_loss))
+        # print(sys.getsizeof(base64.b64encode(buffer.getvalue())))
+        # print(sys.getsizeof(gzip.compress(base64.b64encode(buffer.getvalue()))))
+        # txn = self.contract.functions.set_parameters(
+        #         base64.b64encode(buffer.getvalue()),
+        #         int(float(val_avg_loss) * 100000) if val_avg_loss != 'NaN' else 1000000000000)\
+        #     .buildTransaction({
+        #         'nonce': self.w3.eth.getTransactionCount(self.w3.eth.accounts[0]),
+        #         'from': self.w3.eth.accounts[0],
+        #         'gas': 1000000,
+        #         'gasPrice': self.w3.toWei('1', 'gwei')
+        #     }
+        # )
+        # signed_txn = self.w3.eth.account.signTransaction(txn, private_key=self.private_key)
+        # tx_hash = self.w3.eth.sendRawTransaction(signed_txn.rawTransaction)
+        # self.w3.eth.waitForTransactionReceipt(tx_hash)
+        ray.get(
+            self.blackboard.set_global_state_dict.remote(
+                self.client_id,
+                copy.deepcopy(self.net.state_dict())
+            )
+        )
+        print('Syncing done!')
 
     def _fit(self, train_loader, validation_loader, model_dir,
              result_dir, init_epoch, num_epochs, validate_after,
@@ -917,10 +1043,28 @@ class ModelSiamese(ModelBase):
             batch_train_end_time = time.time()
             self.tracking.train_time = self.tracking.train_time + \
                 batch_train_end_time - batch_train_start_time
+            print(wandb.run)
+            # if wandb.run is not None:
+
+            if epoch % validate_after != 0:
+                wandb.log({
+                    "client": self.client_id,
+                    "epoch_sur": epoch,
+                    "p@1_sur": wandb.run.summary['p@1_sur'],
+                    "p@3_sur": wandb.run.summary['p@3_sur'],
+                    "p@5_sur": wandb.run.summary['p@5_sur'],
+                    "ndcg@1_sur": wandb.run.summary['ndcg@1_sur'],
+                    "ndcg@3_sur": wandb.run.summary['ndcg@3_sur'],
+                    "ndcg@5_sur": wandb.run.summary['ndcg@5_sur'],
+                    "train_loss_surrogate": tr_avg_loss,
+                    "train_time_surrogate": batch_train_end_time - batch_train_start_time,
+                })
             self.logger.info(
                 "Epoch: {:d}, loss: {:.6f}, time: {:.2f} sec".format(
                     epoch, tr_avg_loss,
                     batch_train_end_time - batch_train_start_time))
+            if hasattr(self, 'sync_step') and epoch != 0 and epoch % self.sync_step == 0:
+                self._sync_model_with_chain(train_loader, validation_loader, beta)
             if validation_loader is not None and epoch % validate_after == 0:
                 val_start_t = time.time()
                 predicted_labels, val_avg_loss = self._validate(
@@ -934,12 +1078,27 @@ class ModelSiamese(ModelBase):
                 self.tracking.mean_val_loss.append(val_avg_loss)
                 self.tracking.val_precision.append(_acc['knn'][0])
                 self.tracking.val_ndcg.append(_acc['knn'][1])
+
+                print(wandb.run)
+
+                wandb.log({
+                    "client": self.client_id,
+                    "epoch_sur": epoch,
+                    "p@1_sur": _acc['knn'][0][0],
+                    "p@3_sur": _acc['knn'][0][2],
+                    "p@5_sur": _acc['knn'][0][4],
+                    "ndcg@1_sur": _acc['knn'][1][0],
+                    "ndcg@3_sur": _acc['knn'][1][2],
+                    "ndcg@5_sur": _acc['knn'][1][4],
+                    "train_loss_surrogate": tr_avg_loss,
+                    "train_time_surrogate": batch_train_end_time - batch_train_start_time,
+                })
                 _acc = self._format_acc(_acc['knn'])
                 self.logger.info("Model saved after epoch: {}".format(epoch))
                 self.save_checkpoint(model_dir, epoch+1)
                 self.tracking.last_saved_epoch = epoch
                 self.logger.info(
-                    "P@1 (knn): {:s}, loss: {:s},"
+                    "P@k {:s}, loss: {:s},"
                     " time: {:.2f} sec".format(
                         _acc, val_avg_loss,
                         val_end_t-val_start_t))

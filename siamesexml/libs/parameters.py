@@ -371,7 +371,7 @@ class Parameters(ParametersBase):
         self.parser.add_argument(
             '--devices',
             action='append',
-            default=['cuda:0'],
+            default=['cpu'],
             help='Device for embeddings'
         )
         self.parser.add_argument(

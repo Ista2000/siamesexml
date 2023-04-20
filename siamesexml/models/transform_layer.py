@@ -1,3 +1,4 @@
+import os
 import sys
 import re
 import torch.nn as nn
@@ -43,7 +44,7 @@ class Transform(nn.Module):
         eg {emb_size:300}
     """
 
-    def __init__(self, modules, device="cuda:0"):
+    def __init__(self, modules, device="cpu"):
         super(Transform, self).__init__()
         self.device = device
         if len(modules) == 1:

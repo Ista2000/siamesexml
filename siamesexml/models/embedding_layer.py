@@ -36,14 +36,14 @@ class Embedding(torch.nn.Module):
         Initialize with these weights
         * first token is treated as a padding index
         * dim=1 should be one less than the num_embeddings
-    device: str, optional (default="cuda:0")
+    device: str, optional (default="cpu")
         Keep embeddings on this device
     """
 
     def __init__(self, num_embeddings, embedding_dim, padding_idx=None,
                  max_norm=None, norm_type=2, scale_grad_by_freq=False,
                  sparse=False, reduction=True, pretrained_weights=None,
-                 device="cuda:0"):
+                 device="cpu"):
         super(Embedding, self).__init__()
         self.num_embeddings = num_embeddings
         self.embedding_dim = embedding_dim

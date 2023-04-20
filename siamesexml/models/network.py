@@ -1,3 +1,5 @@
+from typing import Type
+
 import torch
 import torch.nn as nn
 import numpy as np
@@ -45,7 +47,7 @@ class DeepXMLBase(nn.Module):
         padding index in words embedding layer
     """
 
-    def __init__(self, config, device="cuda:0"):
+    def __init__(self, config, device="cpu"):
         super(DeepXMLBase, self).__init__()
         self.transform = self._construct_transform(config)
         self.classifier = self._construct_classifier()
@@ -431,7 +433,7 @@ class SiameseXML(DeepXMLBase):
     * Allows different or same embeddings for documents and labels
     * Allows different or same transformation for documents and labels
     """
-    def __init__(self, params, device="cuda:0"):
+    def __init__(self, params, device="cpu"):
         super(SiameseXML, self).__init__(None)
         self.share_weights = params.share_weights
         self.metric = params.metric

@@ -26,12 +26,12 @@ class Astec(nn.Module):
         * the optimizer will infer from this parameters
     freeze_embeddings: boolean, optional (default=False)
         * freeze the gradient of token embeddings
-    device: str, optional (default="cuda:0")
+    device: str, optional (default="cpu")
         Keep embeddings on this device
     """
     def __init__(self, vocabulary_dims, embedding_dims=300,
                  dropout=0.5, padding_idx=0, reduction='sum',
-                 sparse=True, freeze=False, device="cuda:0"):
+                 sparse=True, freeze=False, device="cpu"):
         super(Astec, self).__init__()
         self.vocabulary_dims = vocabulary_dims + 1
         self.embedding_dims = embedding_dims

@@ -21,14 +21,14 @@
         "tst_feat_fname": "tst_X_Xf.txt"
     },
     "siamese": {
-        "num_epochs": 50,
+        "num_epochs": 49,
         "dlr_factor": 0.75,
         "batch_type": "label",
         "loss": "kprob_contrastive",
         "model_method": "siamese",
         "network_type": "siamese",
         "metric": "cosine",
-        "validate_after": 30,
+        "validate_after": 8,
         "learning_rate": 0.01,
         "batch_size": 4095,
         "dlr_step": 30,
@@ -40,7 +40,7 @@
         "save_intermediate": true
     },
     "extreme": {
-        "num_epochs": 20,
+        "num_epochs": 21,
         "dlr_factor": 0.5,
         "learning_rate": 0.0002,
         "batch_size": 255,
@@ -49,7 +49,7 @@
         "ns_method": "ensemble",
         "num_centroids": 1,
         "efC": 300,
-        "validate_after": 10,
+        "validate_after": 5,
         "efS": 300,
         "M": 100,
         "num_nbrs": 500,
